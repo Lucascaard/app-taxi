@@ -1,6 +1,8 @@
 import axios from "axios";
+import dotenv from "dotenv";
+dotenv.config(); // Garantindo que as variáveis sejam carregadas
 
-const API_KEY = "AIzaSyD3wiUwIv9_0do0IEwPHHm1jEOGhDVHmfI";
+const API_KEY = process.env.GOOGLE_API_KEY;
 const BASE_URL = `https://routes.googleapis.com/directions/v2:computeRoutes`; // Corrigido para v1
 
 const getRoute = async (origin: string, destination: string) => {

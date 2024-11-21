@@ -4,13 +4,23 @@ import mapsService from "../services/mapsService";
 export const estimateRide = async (req: Request, res: Response) => {
   const { customer_id, origin, destination, travelMode = "DRIVE" } = req.body;
 
-  // Validações simples
+  // Os endereços de origem e destino recebidos não podem estar em branco. 
+  // O id do usuário não pode estar em branco. 
+
   if (!customer_id || !origin || !destination) {
     return res.status(400).json({
       error_code: "INVALID_DATA",
       error_description:
         "Os campos customer_id, origin e destination são obrigatórios.",
     });
+  }
+
+  //Os endereços de origem e destino não podem ser o mesmo endereço. 
+  if(origin === destination) {
+    return res.status(400).json({
+      error_code: "INVALID_DATA",
+      error_description: "Os enderecos de partida e chegada nao podem ser iguais",
+    })
   }
 
   try {
