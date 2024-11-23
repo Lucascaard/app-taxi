@@ -5,7 +5,10 @@ dotenv.config(); // Carrega as variáveis de ambiente do arquivo .env para `proc
 const API_KEY = process.env.GOOGLE_API_KEY || "fallback_key"; // Define a chave da API do Google, utilizando uma variável de ambiente ou um valor padrão caso ela não esteja disponível.
 const BASE_URL = `https://routes.googleapis.com/directions/v2:computeRoutes`; // URL base da API Routes do Google.
 
-const getRoute = async (origin: { latitude: number; longitude: number }, destination: { latitude: number; longitude: number }) => {
+const getRoute = async (
+  origin: { latitude: number; longitude: number },
+  destination: { latitude: number; longitude: number }
+) => {
   console.log("Iniciando requisição de rota"); // Mensagem de log para indicar o início da requisição.
 
   try {
@@ -39,7 +42,8 @@ const getRoute = async (origin: { latitude: number; longitude: number }, destina
         headers: {
           "Content-Type": "application/json", // Especifica que o corpo da requisição está no formato JSON.
           "X-Goog-Api-Key": API_KEY, // Inclui a chave da API para autenticação.
-          "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline", // Especifica os campos desejados na resposta da API.
+          "X-Goog-FieldMask":
+            "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline", // Especifica os campos desejados na resposta da API.
         },
       }
     );

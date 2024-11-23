@@ -3,7 +3,12 @@ import { geocodeAddress } from "../utils/geocoding";
 import mapsService from "../services/mapsService";
 import DRIVERS from "../data/drivers";
 import { saveRide } from "../models/rideModel";
-import { validateRideData } from "../utils/validators";
+import {
+  validateRideData,
+  validateDriverAndDistance,
+  validateCustomerId,
+  validateDriverId,
+} from "../utils/validators";
 import { getRidesByCustomer } from "../models/rideModel";
 
 /**
@@ -14,7 +19,7 @@ import { getRidesByCustomer } from "../models/rideModel";
 export const estimateRide = async (req: Request, res: Response) => {
   const { customer_id, origin, destination } = req.body;
 
-  if (!customer_id || !origin || !destination) {
+  /*if (!customer_id || !origin || !destination) {
     return res.status(400).json({
       error_code: "INVALID_DATA",
       error_description:
@@ -27,6 +32,15 @@ export const estimateRide = async (req: Request, res: Response) => {
       error_code: "INVALID_DATA",
       error_description:
         "Os endereços de origem e destino não podem ser os mesmos.",
+    });
+  } */
+
+  // Validando os dados com a função validateRideData
+  const validation = validateRideData(req.body);
+  if (!validation.isValid) {
+    return res.status(400).json({
+      error_code: "INVALID_DATA",
+      error_description: validation.error,
     });
   }
 
@@ -83,7 +97,6 @@ export const estimateRide = async (req: Request, res: Response) => {
  * @param res Resposta enviada.
  */
 export const confirmRide = async (req: Request, res: Response) => {
-  //! Desestrutura os dados do corpo da requisição
   const {
     customer_id,
     origin,
@@ -94,69 +107,43 @@ export const confirmRide = async (req: Request, res: Response) => {
     value,
   } = req.body;
 
-  //? Validação 1: Verificar se os campos obrigatórios estão preenchidos
-  if (
-    !customer_id ||
-    !origin ||
-    !destination ||
-    !distance ||
-    !duration ||
-    !driver ||
-    !value
-  ) {
+  // Validação usando a função validateRideData para campos gerais
+  const validation = validateRideData(req.body);
+  if (!validation.isValid) {
     return res.status(400).json({
       error_code: "INVALID_DATA",
-      error_description: "Todos os campos obrigatórios devem ser preenchidos.",
+      error_description: validation.error,
     });
   }
 
-  //? Validação 2: Verificar se origem e destino são iguais
-  if (origin === destination) {
-    return res.status(400).json({
-      error_code: "INVALID_DATA",
-      error_description:
-        "Os endereços de origem e destino não podem ser os mesmos.",
-    });
-  }
-
-  //? Validação 3: Verificar se o motorista informado é válido
-  const driverData = DRIVERS.find((d) => d.id === driver.id);
-  if (!driverData) {
+  // Validação do motorista e da distância
+  const driverValidation = validateDriverAndDistance(driver, distance, DRIVERS);
+  if (!driverValidation.isValid) {
     return res.status(404).json({
       error_code: "DRIVER_NOT_FOUND",
-      error_description: "Motorista não encontrado.",
-    });
-  }
-
-  //? Validação 4: Verificar se a distância é válida para o motorista selecionado
-  if (distance < driverData.minKm) {
-    return res.status(406).json({
-      error_code: "INVALID_DISTANCE",
-      error_description:
-        "A distância informada é menor que a quilometragem mínima aceita pelo motorista.",
+      error_description: driverValidation.error,
     });
   }
 
   try {
-    //? Salvar a viagem no banco de dados
+    // Salvar a viagem no banco de dados
     await saveRide({
       customer_id,
       origin,
       destination,
       distance,
       duration,
-      driver_id: driverData.id,
-      driver_name: driverData.name,
+      driver_id: driver.id,
+      driver_name: driver.name,
       value,
     });
 
-    //? Retorno de sucesso
+    // Retorno de sucesso
     return res.status(200).json({
       success: true,
-      Descrição: "Operação realizada com sucesso.",
+      description: "Operação realizada com sucesso.",
     });
   } catch (error) {
-    //! Tratamento de erro ao salvar no banco de dados
     console.error("Erro ao salvar a viagem no banco de dados:", error);
     return res.status(500).json({
       error_code: "INTERNAL_SERVER_ERROR",
@@ -165,35 +152,46 @@ export const confirmRide = async (req: Request, res: Response) => {
   }
 };
 
-//! Função para buscar viagens de um usuário, com validações e filtragem
+/**
+ * !Função para buscar as viagens de um cliente, com validações e filtragem por motorista.
+ *
+ * @param req - Objeto da requisição, contendo o parâmetro `customer_id` na URL e `driver_id` na query string (opcional).
+ * @param res - Objeto da resposta, usado para retornar os dados ou erros.
+ * @returns Retorna as viagens do cliente ou uma mensagem de erro.
+ */
+
 export const getRides = async (req: Request, res: Response) => {
   const { customer_id } = req.params; // Obtém o ID do cliente da URL
   const { driver_id } = req.query; // Obtém o parâmetro de consulta opcional
 
-  //? Validação 1: Verificar se o ID do cliente está presente
-  if (!customer_id) {
+  // Validação 1: Verificar se o ID do cliente está presente usando a função do validators
+  const customerValidation = validateCustomerId(customer_id);
+  if (!customerValidation.isValid) {
     return res.status(400).json({
       error_code: "INVALID_DATA",
-      error_description: "O ID do cliente é obrigatório.",
+      error_description: customerValidation.error,
     });
   }
 
-  //? Validação 2: Se o driver_id for informado, verificar se é válido
-  if (driver_id && !DRIVERS.find((d) => d.id === Number(driver_id))) {
-    return res.status(400).json({
-      error_code: "INVALID_DRIVER",
-      error_description: "O ID do motorista informado é inválido.",
-    });
+  // Validação 2: Se o driver_id for informado, verificar se é válido
+  if (driver_id) {
+    const driverValidation = validateDriverId(Number(driver_id), DRIVERS);
+    if (!driverValidation.isValid) {
+      return res.status(400).json({
+        error_code: "INVALID_DRIVER",
+        error_description: driverValidation.error,
+      });
+    }
   }
 
   try {
-    //! Busca as viagens no banco de dados
+    // Busca as viagens no banco de dados com base no ID do cliente e, se necessário, no driver_id
     const rides = await getRidesByCustomer(
       customer_id,
       driver_id ? Number(driver_id) : undefined
     );
 
-    //? Validação 3: Verificar se existem viagens
+    // Validação 3: Verificar se existem viagens
     if (rides.length === 0) {
       return res.status(404).json({
         error_code: "NO_RIDES_FOUND",
@@ -202,13 +200,13 @@ export const getRides = async (req: Request, res: Response) => {
       });
     }
 
-    //! Responder com as viagens encontradas
+    // Responder com as viagens encontradas
     return res.status(200).json({
       customer_id,
       rides,
     });
   } catch (error) {
-    //! Tratamento de erro interno
+    // Tratamento de erro interno ao buscar viagens
     console.error("Erro ao buscar viagens:", error);
     return res.status(500).json({
       error_code: "INTERNAL_SERVER_ERROR",

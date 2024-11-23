@@ -38,10 +38,11 @@ export const saveRide = (ride: {
   });
 };
 
-
-
 //! Função para buscar viagens no banco
-export const getRidesByCustomer = async (customer_id: string, driver_id?: number) => {
+export const getRidesByCustomer = async (
+  customer_id: string,
+  driver_id?: number
+) => {
   let query = `
     SELECT 
       id, date, origin, destination, distance, duration, driver_id, driver_name, value 
@@ -51,8 +52,8 @@ export const getRidesByCustomer = async (customer_id: string, driver_id?: number
 
   const params: (string | number)[] = [customer_id];
 
-   // Adicionando log para verificar o valor de customer_id
-   console.log('Searching for rides with customer_id:', customer_id);
+  // Adicionando log para verificar o valor de customer_id
+  console.log("Searching for rides with customer_id:", customer_id);
 
   if (driver_id) {
     query += " AND driver_id = ?";
@@ -91,10 +92,8 @@ export const getRidesByCustomer = async (customer_id: string, driver_id?: number
       },
       value: ride.value,
     }));
-
   } catch (error) {
     console.error("Error fetching rides:", error);
     throw error; // Re-throw to let the controller handle it
   }
 };
-

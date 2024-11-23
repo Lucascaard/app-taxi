@@ -14,12 +14,11 @@ const handleConfirm = async (req: Request, res: Response) => {
 
 const handleGetRides = async (req: Request, res: Response) => {
   await rideController.getRides(req, res);
-} 
+};
 
 // Use a função na definição da rota
 router.post("/ride/estimate", handleEstimateRide);
 router.patch("/ride/confirm", handleConfirm);
 router.get("/ride/:customer_id", handleGetRides);
-
 
 export default router;

@@ -3,10 +3,10 @@ import { Database } from "sqlite3";
 // Caminho para o banco de dados
 const DB_FILE = "./rides.db";
 
-// Criar conexão com o banco
+// Cria conexão com o banco
 const db = new Database(DB_FILE);
 
-// Criar tabelas e inserir dados
+// Cria tabelas e inserir dados
 db.serialize(() => {
   console.log("Populando banco de dados...");
 
@@ -27,7 +27,7 @@ db.serialize(() => {
     );
   `);
 
-  // Inserir corridas para o endpoint GET /ride/{customer_id}
+  // Inseri corridas para o endpoint GET /ride/{customer_id}
   const rides = [
     {
       customer_id: "12345",
