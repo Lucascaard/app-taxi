@@ -1,56 +1,17 @@
-//! Usamos essas importações para definir tipos para a requisição e resposta, além de criar endpoints com Express.
-import express, { Request, Response } from "express";
-
-//!  Importa o serviço que faz a chamada à API Routes do Google.
+import { Request, Response } from "express";
+import { geocodeAddress } from "../utils/geocoding";
 import mapsService from "../services/mapsService";
+import DRIVERS from "../data/drivers";
+import { saveRide } from "../models/rideModel";
+import { validateRideData } from "../utils/validators";
+import { getRidesByCustomer } from "../models/rideModel";
 
-//!  Importado aqui para usar a API Geocoding, que transforma endereços em coordenadas (latitude e longitude).
-import axios from "axios";
-
-//! URL base para a API Geocoding, usada para converter endereços em coordenadas.
-const GEOCODING_API_URL = "https://maps.googleapis.com/maps/api/geocode/json";
-
-//!  A chave da API é carregada a partir do arquivo .env. Se não estiver configurada, usamos uma chave alternativa (fallback_key).
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "fallback_key";
-
-//! Função para geocodificar endereços
-const geocodeAddress = async (address: string) => {
-  const response = await axios.get(GEOCODING_API_URL, {
-    params: {
-      address,
-      key: GOOGLE_API_KEY,
-    },
-  });
-
-  if (response.data.status !== "OK") {
-    throw new Error(`Erro ao geocodificar endereço: ${response.data.status}`);
-  }
-
-  const location = response.data.results[0].geometry.location;
-  return { latitude: location.lat, longitude: location.lng };
-};
-
-/*
-    axios.get(): Faz uma requisição GET para a API Geocoding.
-
-    address: O endereço fornecido no corpo da requisição.
-    key: A chave da API.
-    Validação do status da API:
-
-    Se a resposta não for "OK", lançamos um erro indicando o problema. Isso evita que dados inválidos continuem no fluxo.
-    Extração das coordenadas:
-
-    Obtemos latitude e longitude da propriedade geometry.location do primeiro resultado retornado.
-    Retorno:
-
-    Retornamos as coordenadas como um objeto { latitude, longitude }.
+/**
+ * !Endpoint responsável por calcular uma corrida.
+ * @param req Requisição recebida.
+ * @param res Resposta enviada.
  */
-
 export const estimateRide = async (req: Request, res: Response) => {
-  /*
-    req: Contém os dados enviados pelo cliente.
-    res: Usado para enviar a resposta ao cliente.
-  */
   const { customer_id, origin, destination } = req.body;
 
   if (!customer_id || !origin || !destination) {
@@ -69,96 +30,27 @@ export const estimateRide = async (req: Request, res: Response) => {
     });
   }
 
-  /* 
-   !Desestruturação do req.body:
-
-    Extrai os campos enviados no corpo da requisição.
-    Validação de campos obrigatórios:
-
-    Se customer_id, origin ou destination estiverem vazios, retornamos um erro 400 (Bad Request) com uma mensagem clara.
-    Validação de endereços iguais:
-
-    Garantimos que origem e destino sejam diferentes.
-  */
-
   try {
-    //! Geocodificar os endereços
     const originCoordinates = await geocodeAddress(origin);
     const destinationCoordinates = await geocodeAddress(destination);
 
-    /*
-      Conversão de endereços em coordenadas:
-      Usamos a função geocodeAddress para transformar origin e destination em coordenadas.
-    */
-
-    // Obter a rota
     const routeData = await mapsService.getRoute(
       originCoordinates,
       destinationCoordinates
     );
 
-    // Chamamos o serviço getRoute (em mapsService) para calcular a rota entre as coordenadas.
-
-    //! VALIDACAO DA RESPOSTA DA API
     if (!routeData.routes || routeData.routes.length === 0) {
       return res.status(404).json({
         error_code: "ROUTE_NOT_FOUND",
         error_description:
           "Não foi possível calcular uma rota entre os endereços fornecidos.",
-
-        //Garantimos que a resposta contenha pelo menos uma rota válida. Caso contrário, retornamos um erro 404 (Not Found).
       });
     }
 
-    //! Extração de informações da rota
     const route = routeData.routes[0];
-    const distanceMeters = route.distanceMeters;
-    const duration = route.duration;
-    const distanceKm = distanceMeters / 1000;
+    const distanceKm = route.distanceMeters / 1000;
 
-    //! Dados de motoristas
-    const drivers = [
-      {
-        id: 1,
-        name: "Homer Simpson",
-        description: "Motorista camarada com rosquinhas e boas risadas.",
-        vehicle: "Plymouth Valiant 1973 rosa",
-        review: {
-          rating: 2,
-          comment: "Simpatia, mas carro com cheiro de donuts.",
-        },
-        ratePerKm: 2.5,
-        minKm: 1,
-      },
-      {
-        id: 2,
-        name: "Dominic Toretto",
-        description: "Viagem com segurança e playlist especial.",
-        vehicle: "Dodge Charger R/T 1970",
-        review: {
-          rating: 4,
-          comment: "Carro incrível, motorista super gente boa.",
-        },
-        ratePerKm: 5.0,
-        minKm: 5,
-      },
-      {
-        id: 3,
-        name: "James Bond",
-        description: "Passeio suave e discreto digno de um agente secreto.",
-        vehicle: "Aston Martin DB5",
-        review: {
-          rating: 5,
-          comment: "Serviço impecável, experiência magnífica.",
-        },
-        ratePerKm: 10.0,
-        minKm: 10,
-      },
-    ];
-
-    //! Filtragem e ordenação
-    const options = drivers
-      .filter((driver) => distanceKm >= driver.minKm)
+    const options = DRIVERS.filter((driver) => distanceKm >= driver.minKm)
       .map((driver) => ({
         id: driver.id,
         name: driver.name,
@@ -169,26 +61,11 @@ export const estimateRide = async (req: Request, res: Response) => {
       }))
       .sort((a, b) => a.value - b.value);
 
-    /*
-        !Filtragem:
-
-        Apenas motoristas cuja distância mínima (minKm) é satisfeita são incluídos.
-        Mapeamento:
-
-        Cada motorista na lista é transformado em um objeto contendo:
-        Informações básicas do motorista.
-        value: Valor total da corrida (taxa por km × distância).
-        Ordenação:
-
-        Os motoristas são ordenados pelo custo da corrida, do mais barato para o mais caro.
-      */
-
-    //! Resposta Final
     return res.status(200).json({
       origin: originCoordinates,
       destination: destinationCoordinates,
       distance: distanceKm,
-      duration,
+      duration: route.duration,
       options,
       routeResponse: routeData,
     });
@@ -200,12 +77,144 @@ export const estimateRide = async (req: Request, res: Response) => {
   }
 };
 
-/*
-  Retornamos:
-  Coordenadas de origem e destino.
-  Distância e duração.
-  Lista de motoristas ordenada por custo.
-  Resposta original da rota do Google.
-*/
+/**
+ * !Endpoint responsável por confirmar uma corrida.
+ * @param req Requisição recebida.
+ * @param res Resposta enviada.
+ */
+export const confirmRide = async (req: Request, res: Response) => {
+  //! Desestrutura os dados do corpo da requisição
+  const {
+    customer_id,
+    origin,
+    destination,
+    distance,
+    duration,
+    driver,
+    value,
+  } = req.body;
 
-export default { estimateRide };
+  //? Validação 1: Verificar se os campos obrigatórios estão preenchidos
+  if (
+    !customer_id ||
+    !origin ||
+    !destination ||
+    !distance ||
+    !duration ||
+    !driver ||
+    !value
+  ) {
+    return res.status(400).json({
+      error_code: "INVALID_DATA",
+      error_description: "Todos os campos obrigatórios devem ser preenchidos.",
+    });
+  }
+
+  //? Validação 2: Verificar se origem e destino são iguais
+  if (origin === destination) {
+    return res.status(400).json({
+      error_code: "INVALID_DATA",
+      error_description:
+        "Os endereços de origem e destino não podem ser os mesmos.",
+    });
+  }
+
+  //? Validação 3: Verificar se o motorista informado é válido
+  const driverData = DRIVERS.find((d) => d.id === driver.id);
+  if (!driverData) {
+    return res.status(404).json({
+      error_code: "DRIVER_NOT_FOUND",
+      error_description: "Motorista não encontrado.",
+    });
+  }
+
+  //? Validação 4: Verificar se a distância é válida para o motorista selecionado
+  if (distance < driverData.minKm) {
+    return res.status(406).json({
+      error_code: "INVALID_DISTANCE",
+      error_description:
+        "A distância informada é menor que a quilometragem mínima aceita pelo motorista.",
+    });
+  }
+
+  try {
+    //? Salvar a viagem no banco de dados
+    await saveRide({
+      customer_id,
+      origin,
+      destination,
+      distance,
+      duration,
+      driver_id: driverData.id,
+      driver_name: driverData.name,
+      value,
+    });
+
+    //? Retorno de sucesso
+    return res.status(200).json({
+      success: true,
+      Descrição: "Operação realizada com sucesso.",
+    });
+  } catch (error) {
+    //! Tratamento de erro ao salvar no banco de dados
+    console.error("Erro ao salvar a viagem no banco de dados:", error);
+    return res.status(500).json({
+      error_code: "INTERNAL_SERVER_ERROR",
+      error_description: "Erro ao salvar a viagem no banco de dados.",
+    });
+  }
+};
+
+//! Função para buscar viagens de um usuário, com validações e filtragem
+export const getRides = async (req: Request, res: Response) => {
+  const { customer_id } = req.params; // Obtém o ID do cliente da URL
+  const { driver_id } = req.query; // Obtém o parâmetro de consulta opcional
+
+  //? Validação 1: Verificar se o ID do cliente está presente
+  if (!customer_id) {
+    return res.status(400).json({
+      error_code: "INVALID_DATA",
+      error_description: "O ID do cliente é obrigatório.",
+    });
+  }
+
+  //? Validação 2: Se o driver_id for informado, verificar se é válido
+  if (driver_id && !DRIVERS.find((d) => d.id === Number(driver_id))) {
+    return res.status(400).json({
+      error_code: "INVALID_DRIVER",
+      error_description: "O ID do motorista informado é inválido.",
+    });
+  }
+
+  try {
+    //! Busca as viagens no banco de dados
+    const rides = await getRidesByCustomer(
+      customer_id,
+      driver_id ? Number(driver_id) : undefined
+    );
+
+    //? Validação 3: Verificar se existem viagens
+    if (rides.length === 0) {
+      return res.status(404).json({
+        error_code: "NO_RIDES_FOUND",
+        error_description:
+          "Nenhuma viagem encontrada para o cliente informado.",
+      });
+    }
+
+    //! Responder com as viagens encontradas
+    return res.status(200).json({
+      customer_id,
+      rides,
+    });
+  } catch (error) {
+    //! Tratamento de erro interno
+    console.error("Erro ao buscar viagens:", error);
+    return res.status(500).json({
+      error_code: "INTERNAL_SERVER_ERROR",
+      error_description: "Erro ao buscar viagens no banco de dados.",
+    });
+  }
+};
+
+export default { estimateRide, confirmRide, getRides };
