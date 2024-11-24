@@ -19,22 +19,6 @@ import { getRidesByCustomer } from "../models/rideModel";
 export const estimateRide = async (req: Request, res: Response) => {
   const { customer_id, origin, destination } = req.body;
 
-  /*if (!customer_id || !origin || !destination) {
-    return res.status(400).json({
-      error_code: "INVALID_DATA",
-      error_description:
-        "Os campos customer_id, origin e destination são obrigatórios.",
-    });
-  }
-
-  if (origin === destination) {
-    return res.status(400).json({
-      error_code: "INVALID_DATA",
-      error_description:
-        "Os endereços de origem e destino não podem ser os mesmos.",
-    });
-  } */
-
   // Validando os dados com a função validateRideData
   const validation = validateRideData(req.body);
   if (!validation.isValid) {
